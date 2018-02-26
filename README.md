@@ -1,5 +1,7 @@
 # PDP 11 Emulators in Javascript by Paul Nankervis
 
+![alt text](./assets/pdp1170-large.png)
+
 This repository contains the code originally written by Paul Nankervis to emulate a number of the PDP 11 series microcomputers by Digital Equipment Corporation (DEC).
 
 The code in this repository originally lived (and continues to live until further notice) on Paul's site located at this address: [https://skn.noip.me/pdp11/pdp11.html](https://skn.noip.me/pdp11/pdp11.html)
