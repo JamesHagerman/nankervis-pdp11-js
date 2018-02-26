@@ -2,7 +2,7 @@
 
 This repository contains the code originally written by Paul Nankervis to emulate a number of the PDP 11 series microcomputers by Digital Equipment Corporation (DEC).
 
-The code in this repository originally lived (and continues to live until further notice) on Paul's site located at this address: (https://skn.noip.me/pdp11/pdp11.html)[https://skn.noip.me/pdp11/pdp11.html]
+The code in this repository originally lived (and continues to live until further notice) on Paul's site located at this address: [https://skn.noip.me/pdp11/pdp11.html](https://skn.noip.me/pdp11/pdp11.html)
 
 Permission was given, by Paul to upload his source code to GitHub. This is the result of that work.
 
@@ -16,11 +16,11 @@ In case things are unclear, be sure to check things on Paul's original site as t
 
 This emulator came about because years ago I was a programmer for RSTS/E on a PDP 11/45 and had admired the console idle loop light pattern - but I couldn't quite remember how it looked. Given the unavailability of real systems it became time to write an emulator!
 
-I was going to start with a PDP 11/45 emulator but the extra memory of a PDP 11/70 became far too attractive (a whole 4MB!). It took some time before I finally produced a (PDP 11/45)[http://skn.noip.me/pdp11/pdp11-45.html] version.
+I was going to start with a PDP 11/45 emulator but the extra memory of a PDP 11/70 became far too attractive (a whole 4MB!). It took some time before I finally produced a [PDP 11/45](http://skn.noip.me/pdp11/pdp11-45.html) version.
 
 I have met my core objective - I can now see the RSTS/E console light pattern that I was looking for, and found that newer versions (eg v9.6) have a different light pattern. Also I have now seen some of the light patterns for other OSes. RSX and BSD 2.11 have their own different patterns and Unix V5 and Ultrix operate with absolute minimum light movement (I'm assuming they operates mostly in WAIT mode).
 
-Getting all of the operating systems used here presents its own set of challenges - one of which is finding the software in the first place. But one of the most interesting was RSTS/E V06C which has its own (story)[https://skn.noip.me/pdp11/RSTSv06c.html].
+Getting all of the operating systems used here presents its own set of challenges - one of which is finding the software in the first place. But one of the most interesting was RSTS/E V06C which has its own [story](https://skn.noip.me/pdp11/RSTSv06c.html).
 
 Note: The boot code in this emulator is a custom PDP 11 program running with it's own set of light patterns. It is initially loaded at address 140000 and the LIGHTS command operates by mapping a WAIT instruction to different addresses within Supervisor mode. The source for this program can be found in the RT11 operating environment as BOOT.MAC You can use this code to boot one of the guest OSes or use the LIGHTS command and DIAG command to experiment with idle light patterns and load test the CPU.
 
@@ -78,11 +78,11 @@ This emulator matches approximately the following SIMH configuration:
 ```
 
 This emulator then loads in the BOOT.MAC code to location 140000 and begins execution there.
-There are many PDP emulators out there and I have never seen what I consider to be a complete list. Some of the really interesting ones can be found by googling terms such as "vhdl pdp 11". However the gold standard seems to be SIMH at (Trailing Edge)[http://simh.trailing-edge.com/]. A different approach to Javascript PDP 11 emulation can be found at (www.pcjs.org)[http://www.pcjs.org/devices/pdp11/].
+There are many PDP emulators out there and I have never seen what I consider to be a complete list. Some of the really interesting ones can be found by googling terms such as "vhdl pdp 11". However the gold standard seems to be SIMH at [Trailing Edge](http://simh.trailing-edge.com/). A different approach to Javascript PDP 11 emulation can be found at [www.pcjs.org](http://www.pcjs.org/devices/pdp11/).
 
-I believe that the first PDP 11 emulator would be SIM-11 written in FORTRAN before the first PDP 11/20 hardware was even built - see (How the PDP-11 Was Born)[http://www.hampage.hu/pdp-11/birth.html]. There is more PDP 11 history at (www.hampage.hu)[http://www.hampage.hu/pdp-11/main.html].
+I believe that the first PDP 11 emulator would be SIM-11 written in FORTRAN before the first PDP 11/20 hardware was even built - see [How the PDP-11 Was Born](http://www.hampage.hu/pdp-11/birth.html). There is more PDP 11 history at [www.hampage.hu](http://www.hampage.hu/pdp-11/main.html).
 
-Of course if you want your own PDP 11/70 front panel you might consider (one of these)[https://hackaday.io/project/8069-pidp-11].
+Of course if you want your own PDP 11/70 front panel you might consider [one of these](https://hackaday.io/project/8069-pidp-11).
 
 Happy emulating!
 
@@ -90,7 +90,7 @@ Paul Nankervis
 
 ## List of guest OS's:
 
-*Note: Due to the size of some of these images, they are not included in this GitHub repository themselves. Instead, they can be found on the (Releases)[https://github.com/JamesHagerman/nankervis-pdp11-js/releases] page of this repo, or on Paul's original site. If using the Releases version, extract the archive and place the `*.dsk` and `*.tap` files in the `os-images/` directory inside this repository.*
+*Note: Due to the size of some of these images, they are not included in this GitHub repository themselves. Instead, they can be found on the [Releases](https://github.com/JamesHagerman/nankervis-pdp11-js/releases) page of this repo, or on Paul's original site. If using the Releases version, extract the archive and place the `*.dsk` and `*.tap` files in the `os-images/` directory inside this repository.*
 
 ```
 Disk	OS	Comment
@@ -111,11 +111,11 @@ RP2	RSTS/E v9.6	Answer boot questions and login as 1,2 (password SYSTEM) or 11,7
 RP3	RSX 11M v4.6	Starts logged in as 1,2 (password SYSTEM) - user accounts 200,1 (no password) or 11,70 (password PDP)
 ```
 
-Note: Disks are shown in approximately order size. The (RK05)[https://en.wikipedia.org/wiki/RK05] disks at the top are small and not too bad to use across a network. The (RP06)[http://www.columbia.edu/cu/computinghistory/rp06.html] disks at the bottom can be rather slow.
+Note: Disks are shown in approximately order size. The [RK05](https://en.wikipedia.org/wiki/RK05) disks at the top are small and not too bad to use across a network. The [RP06](http://www.columbia.edu/cu/computinghistory/rp06.html) disks at the bottom can be rather slow.
 
-(Youtube video 1)[https://www.youtube.com/watch?v=3Nr1E96tXRU]
+[Youtube video 1](https://www.youtube.com/watch?v=3Nr1E96tXRU)
 
-(Youtube video 2)[https://www.youtube.com/watch?v=F-kJo1DTtw4]
+[Youtube video 2](https://www.youtube.com/watch?v=F-kJo1DTtw4)
 
 ## Bugs?
 
