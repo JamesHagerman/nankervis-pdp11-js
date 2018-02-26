@@ -1,0 +1,31 @@
+    .title  chaser
+
+; Can be loaded and executed via front panel switches
+
+; Address Data
+; 001000  012700    mov #1,r0   Load 1 into R0
+; 001002  000001
+; 001004  006100    rol r0      Rotate R0 left - right to left pattern
+; 001006  000005    reset       Initialise bus (70ms)
+; 001010  000775    br .-4      Loop back to 'rol r0'
+
+start:
+    mov #1,r0   ;Load 1 into R0
+    rol r0      ;Rotate R0 left
+    reset       ;Initialise bus (70ms)
+    br .-4      ;Loop back to 'rol r0'
+
+; Or alternatively a count pattern:
+
+; Address Data
+; 001000  005000    clr r0      Initialize R0
+; 001002  005200    inc r0      Increment counter
+; 001004  000005    reset       Initialise bus (70ms)
+; 001006  000775    br .-4      Loop back to 'inc r0'
+
+    clr r0      ;Initialize R0
+    inc r0      ;Increment counter
+    reset       ;Initialise bus (70ms)
+    br .-4      ;Loop back to 'rol r0'
+
+    .end start
