@@ -1,3 +1,4 @@
-*/*.dsk
-*/*.tap
+os-images/*.dsk
+os-images/*.tap
 */os-images.tar.gz
+*.js.map

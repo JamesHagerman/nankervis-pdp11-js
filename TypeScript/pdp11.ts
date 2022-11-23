@@ -10,71 +10,91 @@
 //
 //
 //
-const IOBASE_VIRT = 0o160000, IOBASE_18BIT = 0o760000, IOBASE_UNIBUS = 0o17000000, IOBASE_22BIT = 0o17760000, MAX_MEMORY = IOBASE_UNIBUS - 16384, // Maximum memory address (need less memory for BSD 2.9 boot)
-MAX_ADDRESS = 0o20000000, // Special register addresses are above 22 bit addressing
-BYTE_MODE = 1, // accessMode length of 1 and flag for byte addressing
-READ_MODE = 16, WRITE_MODE = 32, READ_WORD = READ_MODE | 2, READ_BYTE = READ_MODE | BYTE_MODE, WRITE_WORD = WRITE_MODE | 2, WRITE_BYTE = WRITE_MODE | BYTE_MODE, MODIFY_WORD = READ_MODE | WRITE_MODE | 2, MODIFY_BYTE = READ_MODE | WRITE_MODE | BYTE_MODE;
+
+
+const IOBASE_VIRT = 0o160000,
+    IOBASE_18BIT = 0o760000,
+    IOBASE_UNIBUS = 0o17000000,
+    IOBASE_22BIT = 0o17760000,
+    MAX_MEMORY = IOBASE_UNIBUS - 16384, // Maximum memory address (need less memory for BSD 2.9 boot)
+    MAX_ADDRESS = 0o20000000, // Special register addresses are above 22 bit addressing
+	BYTE_MODE = 1, // accessMode length of 1 and flag for byte addressing
+    READ_MODE = 16,
+    WRITE_MODE = 32,
+	READ_WORD = READ_MODE | 2,
+	READ_BYTE = READ_MODE | BYTE_MODE,
+	WRITE_WORD = WRITE_MODE | 2,
+	WRITE_BYTE = WRITE_MODE | BYTE_MODE,	
+    MODIFY_WORD = READ_MODE | WRITE_MODE | 2,
+    MODIFY_BYTE = READ_MODE | WRITE_MODE | BYTE_MODE;
+
+
 var STATE = {
     RUN: 0,
     RESET: 1,
     WAIT: 2,
     HALT: 3
 }; // CPU.runState is either STATE.RUN, STATE.WAIT or STATE.HALT
+
 var CPU = {
-    MMR3Mode: undefined,
-    controlReg: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    MMR3Mode: undefined, // Todo: previously missing
+    controlReg: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // various control registers we don't really care about
     CPU_Error: 0,
     cpuType: 70,
-    displayAddress: 0,
-    displayPhysical: 0,
-    displayRegister: 0,
-    flagC: 0x10000,
-    flagN: 0x8000,
-    flagV: 0x8000,
-    flagZ: 0xffff,
-    memory: [],
-    MMR0: 0,
+    displayAddress: 0, // Address display for console operations
+    displayPhysical: 0, // Physical address display for console operations
+    displayRegister: 0, // Console display lights register
+    flagC: 0x10000, // PSW C bit
+    flagN: 0x8000, // PSW N bit
+    flagV: 0x8000, // PSW V bit
+    flagZ: 0xffff, // ~ PSW Z bit
+    memory: [], // Main memory (in words)
+    MMR0: 0, // MMU control registers
     MMR1: 0,
     MMR2: 0,
     MMR3: 0,
-    MMR3Mask: [7, 7, 7, 7],
-    mmuEnable: 0,
-    mmuLastPage: 0,
-    mmuMode: 0,
+    MMR3Mask: [7, 7, 7, 7], // I&D page mask by mode from KSU bits in MMR3
+    mmuEnable: 0, // MMU enable mask for READ_MODE or WRITE_MODE
+    mmuLastPage: 0, // last used MMU page for MMR0 - 2 bits of mode and 4 bits of I/D page - used as an index into PAR/PDR
+    mmuMode: 0, // current memory management mode (0=kernel,1=super,2=undefined,3=user)
     mmuPAR: [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //0 kernel
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //1 super
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //2 illegal
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 //3 user
-    ],
+    ], // memory management PAR registers by mode
     mmuPDR: [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //0 kernel
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //1 super
+        0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, // 2 illegal
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 //3 user
-    ],
-    PIR: 0,
-    priorityReview: 1,
-    PSW: 0xf,
-    registerAlt: [0, 0, 0, 0, 0, 0],
-    registerVal: [0, 0, 0, 0, 0, 0, 0, 0],
-    stackLimit: 0xff,
-    stackPointer: [0, 0, 0, 0],
-    switchRegister: 0,
-    trapMask: 0,
-    trapPSW: -1,
+    ], // memory management PDR registers by mode
+    PIR: 0, // Programmable interrupt register
+    priorityReview: 1, // flag to mark if we need to check priority change
+    PSW: 0xf, // PSW less flags C, N, V & Z
+    registerAlt: [0, 0, 0, 0, 0, 0], // Alternate registers R0 - R5
+    registerVal: [0, 0, 0, 0, 0, 0, 0, 0], // Current registers  R0 - R7
+    stackLimit: 0xff, // stack overflow limit
+    stackPointer: [0, 0, 0, 0], // Alternate R6 (kernel, super, illegal, user)
+    switchRegister: 0, // console switch register
+    trapMask: 0, // Mask of traps to be taken at the end of the current instruction
+    trapPSW: -1, // PSW when first trap invoked - for tacking double traps
     unibusMap: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    ],
-    runState: -1,
+    ], // 32 unibus map registers
+    runState: -1, // current machine state defined in STATE
     interruptQueue: [], // List of interrupts pending
 };
+
+
 var log = {
-    depth: 64,
+    depth: 64, // 256,
     extras: 0,
     history: []
 };
+
+
 function LOG_INSTRUCTION(instruction, format, name) {
     if (log.depth > 0) {
         if (log.history.length > log.depth + 4) {
@@ -85,18 +105,21 @@ function LOG_INSTRUCTION(instruction, format, name) {
         log.history.push([readPSW(), CPU.registerVal[7], instruction, format, name, -1, -1]);
     }
 }
+
+
 function LOG_SOURCE(source) {
     if (log.depth > 0) {
         if (log.history.length > 0) {
             if (log.history[log.history.length - 1][5] < 0) {
                 log.history[log.history.length - 1][5] = source;
-            }
-            else {
+            } else {
                 log.history[log.history.length - 1][6] = source;
             }
         }
     }
 }
+
+
 function LOG_ADDRESS(address) {
     if (log.depth > 0) {
         if (log.history.length > 0) {
@@ -104,6 +127,8 @@ function LOG_ADDRESS(address) {
         }
     }
 }
+
+
 function LOG_OPERAND(operand, history, index) {
     var result = "R" + (operand & 7).toString();
     switch ((operand >> 3) & 7) {
@@ -113,16 +138,14 @@ function LOG_OPERAND(operand, history, index) {
         case 2:
             if ((operand & 7) == 7 && history[5 + index] >= 0) {
                 result = "#" + history[5 + index].toString(8);
-            }
-            else {
+            } else {
                 result = "(" + result + ")+";
             }
             break;
         case 3:
             if ((operand & 7) == 7) {
                 result = "@#" + history[log.extras++].toString(8);
-            }
-            else {
+            } else {
                 result = "@" + result;
             }
             break;
@@ -135,26 +158,28 @@ function LOG_OPERAND(operand, history, index) {
         case 6:
             if ((operand & 7) == 7) {
                 result = history[log.extras++].toString(8);
-            }
-            else {
+            } else {
                 result = history[log.extras++].toString(8) + "(" + result + ")";
             }
             break;
         case 7:
             if ((operand & 7) == 7) {
                 result = "@" + history[log.extras++].toString(8);
-            }
-            else {
+            } else {
                 result = "@" + history[log.extras++].toString(8) + "(" + result + ")";
             }
             break;
     }
     return result;
 }
+
+
 function LOG_OCTAL(n) {
     n = n.toString(8);
     return "0o00000".substr(n.length) + n;
 }
+
+
 function LOG_PRINT() {
     var i, result, psw, pc, instruction, name, historyRec;
     for (i = 0; i < log.history.length; i++) {
@@ -214,12 +239,15 @@ function LOG_PRINT() {
     }
     log.history = [];
 }
+
+
 // Interrupts are stored in a queue in delay order with the delay expressed as
 // a difference. For example if the delays were 0, 1, 0 then the first entry
 // is active and both the second and third are waiting for one more instruction
 // cycle to become active.
 // If the current runState is WAIT then skip any delay and go to RUN.
-function interrupt(cleanFlag, delay, priority, vector, callback, callarg) {
+
+function interrupt(cleanFlag, delay, priority, vector, callback?, callarg?) { // Todo: double check making these optional is non-breaking
     "use strict";
     var i = CPU.interruptQueue.length;
     if (typeof callback == "undefined") {
@@ -264,9 +292,12 @@ function interrupt(cleanFlag, delay, priority, vector, callback, callarg) {
         }
     }
 }
+
+
 // When a wait instruction is executed do a search through the interrupt list
 // to see if we can run something (anything!) which has been delayed. If there is
 // something then we don't actually need to enter WAIT state.
+
 function interruptWaitRelease() {
     "use strict";
     var savePSW, i;
@@ -281,10 +312,13 @@ function interruptWaitRelease() {
     }
     return 0; // No candidates found for WAIT release
 }
+
+
 // When the PSW, PIR or interrupt queue state have changed then it is time to review
 // the list of pending interrupts to see if we can invoke one. If nothing changes
 // then more reviews are not required until something does change.
 // Review controlled by the flag CPU.priorityReview
+
 function interruptReview() {
     "use strict";
     var highPriority, high, i;
@@ -315,13 +349,14 @@ function interruptReview() {
     if (highPriority > (CPU.PSW & 0xe0)) { // check if we found an interrupt
         if (high < 0) {
             trap(0xa0, 42); // PIR trap 240
-        }
-        else {
+        } else {
             trap(CPU.interruptQueue[high].vector, 44); // BR trap
             CPU.interruptQueue.splice(high, 1);
         }
     }
 }
+
+
 // writePSW() is used to update the CPU Processor Status Word. The PSW should generally
 // be written through this routine so that changes can be tracked properly, for example
 // the correct register set, the current memory management mode, etc. An exception is
@@ -331,6 +366,7 @@ function interruptReview() {
 // CPU.PSW    15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
 //              CM |  PM |RS|        |PRIORITY| T| N| Z| V| C
 // mode 0 kernel 1 super 2 illegal 3 user
+
 function writePSW(newPSW) {
     "use strict";
     var i, temp;
@@ -356,7 +392,10 @@ function writePSW(newPSW) {
     }
     CPU.PSW = newPSW;
 }
+
+
 // readPSW() reassembles the  N, Z, V, and C flags back into the PSW (CPU.PSW)
+
 function readPSW() {
     "use strict";
     CPU.PSW = (CPU.PSW & 0xf8f0) | ((CPU.flagN >> 12) & 8) | ((CPU.flagV >> 14) & 2) | ((CPU.flagC >> 16) & 1);
@@ -365,12 +404,15 @@ function readPSW() {
     }
     return CPU.PSW;
 }
+
+
 // trap() handles all the trap/abort functions. It reads the trap vector from kernel
 // D space, changes mode to reflect the new PSW and PC, and then pushes the old PSW and
 // PC onto the new mode stack. trap() returns a -1 which is passed up through function
 // calls to indicate that a trap/abort has occurred (suspend instruction processing)
 // CPU.trapPSW records the first PSW for double trap handling. The special value of -2
 // allows console mode to propagate an abort without trapping to the new vector.
+
 function trap(vector, reason) {
     "use strict";
     var newPC, newPSW, doubleTrap = 0;
@@ -378,8 +420,7 @@ function trap(vector, reason) {
         if (CPU.trapPSW < 0) {
             CPU.trapMask = 0; // No other traps unless we cause one here
             CPU.trapPSW = readPSW(); // Remember original PSW
-        }
-        else {
+        } else {
             if (!CPU.mmuMode) {
                 vector = 4;
                 doubleTrap = 1;
@@ -407,6 +448,8 @@ function trap(vector, reason) {
     }
     return -1; // signal that a trap has occurred
 }
+
+
 // mapVirtualToPhysical() does memory management. It converts a 17 bit I/D
 // virtual address to a 22 bit physical address (Note: the eight pseudo addresses
 // for handling registers are NOT known at this level - those exist only for
@@ -441,6 +484,7 @@ function trap(vector, reason) {
 //nonr leng read trap unus unus ena mnt cmp  -mode- i/d  --page--   enable
 //
 // Map a 17 bit I/D virtual address to a 22 bit physical address
+
 function mapVirtualToPhysical(virtualAddress, accessMask) {
     "use strict";
     var page, pdr, pdrUpdate, physicalAddress, errorMask;
@@ -452,16 +496,14 @@ function mapVirtualToPhysical(virtualAddress, accessMask) {
         physicalAddress = virtualAddress & 0xffff; // virtual address without MMU is 16 bit (no I&D)
         if (physicalAddress >= IOBASE_VIRT) {
             physicalAddress |= IOBASE_22BIT;
-        }
-        else { // no max_memory check in 16 bit mode
+        } else { // no max_memory check in 16 bit mode
             if ((physicalAddress & 1) && !(accessMask & BYTE_MODE)) {
                 CPU.CPU_Error |= 0x40;
                 return trap(4, 22);
             }
         }
         return physicalAddress;
-    }
-    else { // This access is mapped by the MMU
+    } else { // This access is mapped by the MMU
         page = ((virtualAddress >> 13) & CPU.MMR3Mask[CPU.mmuMode]) | (CPU.mmuMode << 4); // Determine PDR/PAR page index using mode and I&D
         physicalAddress = ((CPU.mmuPAR[page] << 6) + (virtualAddress & 0x1fff)) & 0x3fffff;
         if (!(CPU.MMR3 & 0x10)) { // 18 bit mapping needs extra trimming
@@ -476,8 +518,7 @@ function mapVirtualToPhysical(virtualAddress, accessMask) {
                 return trap(4, 26);
             }
             CPU.mmuLastPage = page;
-        }
-        else { // Higher addresses may require unibus mapping and a check if non-existant
+        } else { // Higher addresses may require unibus mapping and a check if non-existant
             if (physicalAddress < IOBASE_22BIT) {
                 if (physicalAddress >= IOBASE_UNIBUS) {
                     physicalAddress = mapUnibus(physicalAddress & 0x3ffff); // 18bit unibus space
@@ -485,8 +526,7 @@ function mapVirtualToPhysical(virtualAddress, accessMask) {
                         CPU.CPU_Error |= 0x10; // Unibus timeout
                         return trap(4, 24); // KB11-EM does this after ABORT handling - KB11-CM before
                     }
-                }
-                else {
+                } else {
                     CPU.CPU_Error |= 0x20; // Non-existant main memory
                     return trap(4, 24); //
                 }
@@ -530,8 +570,7 @@ function mapVirtualToPhysical(virtualAddress, accessMask) {
                         errorMask |= 0x4000; // page length error abort
                     }
                 }
-            }
-            else { // Page expand upwards
+            } else { // Page expand upwards
                 if ((virtualAddress & 0x1fc0) > ((pdr >> 2) & 0x1fc0)) {
                     errorMask |= 0x4000; // page length error abort
                 }
@@ -560,16 +599,16 @@ function mapVirtualToPhysical(virtualAddress, accessMask) {
         return (CPU.displayPhysical = physicalAddress);
     }
 }
+
+
 function readWordByAddr(physicalAddress) {
     "use strict";
     if (physicalAddress >= MAX_ADDRESS) {
         return CPU.registerVal[physicalAddress - MAX_ADDRESS];
-    }
-    else {
+    } else {
         if (physicalAddress >= IOBASE_UNIBUS) {
             return access_iopage(physicalAddress, -1, 0);
-        }
-        else {
+        } else {
             if (physicalAddress >= 0) {
                 return CPU.memory[physicalAddress >> 1];
             }
@@ -577,17 +616,17 @@ function readWordByAddr(physicalAddress) {
     }
     return physicalAddress;
 }
+
+
 function writeWordByAddr(physicalAddress, data) {
     "use strict";
     data &= 0xffff;
     if (physicalAddress >= MAX_ADDRESS) {
         return (CPU.registerVal[physicalAddress - MAX_ADDRESS] = data);
-    }
-    else {
+    } else {
         if (physicalAddress >= IOBASE_UNIBUS) {
             return access_iopage(physicalAddress, data, 0);
-        }
-        else {
+        } else {
             if (physicalAddress >= 0) {
                 return (CPU.memory[physicalAddress >> 1] = data);
             }
@@ -595,17 +634,17 @@ function writeWordByAddr(physicalAddress, data) {
     }
     return physicalAddress;
 }
+
+
 function readByteByAddr(physicalAddress) {
     "use strict";
     var result;
     if (physicalAddress >= MAX_ADDRESS) {
         return (CPU.registerVal[physicalAddress - MAX_ADDRESS] & 0xff);
-    }
-    else {
+    } else {
         if (physicalAddress >= IOBASE_UNIBUS) {
             return access_iopage(physicalAddress, -1, 1);
-        }
-        else {
+        } else {
             if (physicalAddress >= 0) {
                 result = CPU.memory[physicalAddress >> 1];
                 if (physicalAddress & 1) {
@@ -617,22 +656,21 @@ function readByteByAddr(physicalAddress) {
     }
     return physicalAddress;
 }
+
+
 function writeByteByAddr(physicalAddress, data) {
     "use strict";
     data &= 0xff;
     if (physicalAddress >= MAX_ADDRESS) {
         return (CPU.registerVal[physicalAddress - MAX_ADDRESS] = (CPU.registerVal[physicalAddress - MAX_ADDRESS] & 0xff00) | data);
-    }
-    else {
+    } else {
         if (physicalAddress >= IOBASE_UNIBUS) {
             return access_iopage(physicalAddress, data, 1);
-        }
-        else {
+        } else {
             if (physicalAddress >= 0) {
                 if (physicalAddress & 1) {
                     return (CPU.memory[physicalAddress >> 1] = (data << 8) | (CPU.memory[physicalAddress >> 1] & 0xff));
-                }
-                else {
+                } else {
                     return (CPU.memory[physicalAddress >> 1] = (CPU.memory[physicalAddress >> 1] & 0xff00) | data);
                 }
             }
@@ -640,10 +678,14 @@ function writeByteByAddr(physicalAddress, data) {
     }
     return physicalAddress;
 }
-function readWordByVirtual(virtualAddress) {
+
+
+function readWordByVirtual(virtualAddress) { // input address is 17 bit (I&D)
     "use strict";
     return readWordByAddr(mapVirtualToPhysical(virtualAddress, READ_MODE));
 }
+
+
 function popWord() {
     "use strict";
     var result;
@@ -652,8 +694,10 @@ function popWord() {
     }
     return result;
 }
+
 // Stack limit checks only occur for Kernel mode and are either a yellow warning trap
 // after instruction completion, or a red abort which stops the current instruction.
+
 function stackCheck(virtualAddress) {
     "use strict";
     if (!CPU.mmuMode) { // Kernel mode 0 checking only
@@ -669,6 +713,8 @@ function stackCheck(virtualAddress) {
     }
     return virtualAddress;
 }
+
+
 function pushWord(data, skipLimitCheck) {
     "use strict";
     var physicalAddress, virtualAddress;
@@ -686,6 +732,8 @@ function pushWord(data, skipLimitCheck) {
     }
     return physicalAddress;
 }
+
+
 // getVirtualByMode() maps a six bit operand to a 17 bit I/D virtual address space.
 // Instruction operands are six bits in length - three bits for the mode and three
 // for the register. The 17th I/D bit in the resulting virtual address represents
@@ -719,11 +767,11 @@ function pushWord(data, skipLimitCheck) {
 // if a page fault occurs.
 //
 // Convert a six bit instruction operand to a 17 bit I/D virtual address
+
 function getVirtualByMode(addressMode, accessMode) {
     "use strict";
     var virtualAddress, autoIncrement, reg = addressMode & 7;
-    if (!(accessMode & 0xf))
-        panic(75);
+	if (!(accessMode & 0xf)) panic(75);
     switch ((addressMode >> 3) & 7) {
         case 0: // Mode 0: Registers don't have a virtual address so trap!
             return trap(4, 34); // trap for invalid virtual address
@@ -731,8 +779,7 @@ function getVirtualByMode(addressMode, accessMode) {
             virtualAddress = CPU.registerVal[reg];
             if (reg < 6) {
                 virtualAddress |= 0x10000;
-            }
-            else {
+            } else {
                 if (reg == 6) {
                     if (accessMode & WRITE_MODE) {
                         if ((virtualAddress = stackCheck(virtualAddress)) < 0) {
@@ -745,21 +792,20 @@ function getVirtualByMode(addressMode, accessMode) {
             return virtualAddress;
         case 2: // Mode 2: (R)+
             virtualAddress = CPU.registerVal[reg];
-            if (reg == 7) {
-                autoIncrement = 2; // immediate mode (PC)+ always autoIncrements by 2
-            }
-            else {
-                autoIncrement = accessMode & 0xf;
+			if (reg == 7) {
+				autoIncrement = 2; // immediate mode (PC)+ always autoIncrements by 2
+			} else {
+				autoIncrement = accessMode & 0xf;
                 if (reg == 6) {
-                    if (accessMode & BYTE_MODE) {
-                        autoIncrement = 2; // R6 doesn't autoIncrement by 1
-                    }
+					if (accessMode & BYTE_MODE) {
+						autoIncrement = 2; // R6 doesn't autoIncrement by 1
+					}
                     if (accessMode & WRITE_MODE) {
                         if ((virtualAddress = stackCheck(virtualAddress)) < 0) {
                             return virtualAddress;
                         }
                     }
-                }
+				}
                 virtualAddress |= 0x10000;
             }
             break;
@@ -775,11 +821,10 @@ function getVirtualByMode(addressMode, accessMode) {
             virtualAddress |= 0x10000;
             break;
         case 4: // Mode 4: -(R)
-            autoIncrement = -(accessMode & 0xf);
+			autoIncrement = -(accessMode & 0xf);
             if (reg < 6) {
                 virtualAddress = ((CPU.registerVal[reg] + autoIncrement) & 0xffff) | 0x10000;
-            }
-            else {
+            } else {
                 if (accessMode & BYTE_MODE) {
                     autoIncrement = -2; // R6 & R7 don't decrement by 1
                 }
@@ -810,8 +855,7 @@ function getVirtualByMode(addressMode, accessMode) {
             if (reg < 7) {
                 //LOG_ADDRESS(virtualAddress);
                 virtualAddress = (virtualAddress + CPU.registerVal[reg]) & 0xffff;
-            }
-            else {
+            } else {
                 virtualAddress = (virtualAddress + CPU.registerVal[reg]) & 0xffff;
                 //LOG_ADDRESS(virtualAddress);
             }
@@ -829,8 +873,7 @@ function getVirtualByMode(addressMode, accessMode) {
             if (reg < 7) {
                 //LOG_ADDRESS(virtualAddress);
                 virtualAddress = (virtualAddress + CPU.registerVal[reg]) & 0xffff;
-            }
-            else {
+            } else {
                 virtualAddress = (virtualAddress + CPU.registerVal[reg]) & 0xffff;
                 //LOG_ADDRESS(virtualAddress);
             }
@@ -845,27 +888,29 @@ function getVirtualByMode(addressMode, accessMode) {
     }
     return virtualAddress;
 }
+
+
 function getAddrByMode(addressMode, accessMode) {
     "use strict";
     var result;
     if (!(addressMode & 0x38)) {
         return MAX_ADDRESS + (addressMode & 7); // Registers have special addresses above maximum address
-    }
-    else {
+    } else {
         if ((result = getVirtualByMode(addressMode, accessMode)) >= 0) {
             result = mapVirtualToPhysical(result, accessMode);
         }
         return result;
     }
 }
+
+
 function readWordByMode(addressMode) {
     "use strict";
     var result;
     if (!(addressMode & 0x38)) {
         result = CPU.registerVal[addressMode & 7];
         //LOG_SOURCE(result);
-    }
-    else {
+    } else {
         if ((result = getAddrByMode(addressMode, READ_WORD)) >= 0) {
             if ((result = readWordByAddr(result)) >= 0) {
                 //LOG_SOURCE(result);
@@ -874,14 +919,15 @@ function readWordByMode(addressMode) {
     }
     return result;
 }
+
+
 function readByteByMode(addressMode) {
     "use strict";
     var result;
     if (!(addressMode & 0x38)) {
         result = CPU.registerVal[addressMode & 7] & 0xff;
         //LOG_SOURCE(result);
-    }
-    else {
+    } else {
         if ((result = getAddrByMode(addressMode, READ_BYTE)) >= 0) {
             if ((result = readByteByAddr(result)) >= 0) {
                 //LOG_SOURCE(result);
@@ -890,11 +936,16 @@ function readByteByMode(addressMode) {
     }
     return result;
 }
+
+
 // branch() calculates the branch to PC from a branch instruction offset
+
 function branch(PC, instruction) {
     "use strict";
     return (PC + ((instruction & 0x80 ? instruction | 0xff00 : instruction & 0xff) << 1)) & 0xffff;
 }
+
+
 // Most instruction read operations use a 6 bit instruction operand via
 //   readWordByMode(instruction operand). If the result is negative then
 // something failed and generally a trap or abort has already been invoked.
@@ -974,8 +1025,15 @@ function branch(PC, instruction) {
 // to relinquish control periodically to let timer and I/O functions execute, and to
 // update the console lights. Of course if JavaScript had a method of testing whether
 // an event was pending then we could structure things differently...
+
+
 function step(loopCount) {
-    var instruction, src, dst, dstAddr, result, virtualAddress, savePSW, reg;
+    var instruction,
+        src,
+        dst,
+        dstAddr,
+        result,
+        virtualAddress, savePSW, reg;
     var loopTime = Date.now() + 20; // execute for 20 ms (50 Hz);
     var CPU = window.CPU;
     do {
@@ -988,19 +1046,16 @@ function step(loopCount) {
         if (CPU.trapMask) { // check for any post instruction traps pending
             if (CPU.trapMask & 2) {
                 trap(0o250, 52); // MMU trap 250 has priority
-            }
-            else {
+            } else {
                 if (CPU.trapMask & 4) {
                     trap(4, 54); // then stack warning trap
-                }
-                else {
-                    if (CPU.trapMask & 8) {
-                        trap(0o224, 55); // then floating point exception
-                    }
-                    else {
-                        if (CPU.trapMask & 0x10) { // same bit as T bit trap in PSW
-                            trap(0o14, 56); // and finally a T-bit trap
-                        }
+                } else {
+					if (CPU.trapMask & 8) {
+						trap(0o224, 55); // then floating point exception
+					} else {
+						if (CPU.trapMask & 0x10) { // same bit as T bit trap in PSW
+							trap(0o14, 56); // and finally a T-bit trap
+						}
                     }
                 }
             }
@@ -1024,8 +1079,7 @@ function step(loopCount) {
                             CPU.registerVal[instruction & 7] = src;
                             CPU.flagN = CPU.flagZ = src;
                             CPU.flagV = 0;
-                        }
-                        else {
+                        } else {
                             if ((dstAddr = getAddrByMode(instruction, WRITE_WORD)) >= 0) {
                                 if (writeWordByAddr(dstAddr, src) >= 0) {
                                     CPU.flagN = CPU.flagZ = src;
@@ -1061,8 +1115,7 @@ function step(loopCount) {
                             result = CPU.registerVal[instruction & 7] &= ~src;
                             CPU.flagN = CPU.flagZ = result;
                             CPU.flagV = 0;
-                        }
-                        else {
+                        } else {
                             if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                 result = dst & ~src;
                                 if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1080,8 +1133,7 @@ function step(loopCount) {
                             result = CPU.registerVal[instruction & 7] |= src;
                             CPU.flagN = CPU.flagZ = result;
                             CPU.flagV = 0;
-                        }
-                        else {
+                        } else {
                             if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                 result = dst | src;
                                 if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1101,8 +1153,7 @@ function step(loopCount) {
                             CPU.registerVal[reg] = (result = src + dst) & 0xffff;
                             CPU.flagN = CPU.flagZ = CPU.flagC = result;
                             CPU.flagV = (src ^ result) & (dst ^ result);
-                        }
-                        else {
+                        } else {
                             if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                 result = src + dst;
                                 if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1123,8 +1174,7 @@ function step(loopCount) {
                             CPU.registerVal[instruction & 7] = src;
                             CPU.flagN = CPU.flagZ = src;
                             CPU.flagV = 0;
-                        }
-                        else {
+                        } else {
                             if ((dstAddr = getAddrByMode(instruction, WRITE_BYTE)) >= 0) { // write byte
                                 if (writeByteByAddr(dstAddr, src) >= 0) {
                                     CPU.flagN = CPU.flagZ = src << 8;
@@ -1186,8 +1236,7 @@ function step(loopCount) {
                             CPU.registerVal[reg] = (result = dst - src) & 0xffff;
                             CPU.flagN = CPU.flagZ = CPU.flagC = result;
                             CPU.flagV = (src ^ dst) & (dst ^ result);
-                        }
-                        else {
+                        } else {
                             if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                 result = dst - src;
                                 if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1199,13 +1248,12 @@ function step(loopCount) {
                     }
                     break;
                 case 0o170000: // FPP instructions
-                    if (typeof executeFPP !== 'undefined') {
-                        executeFPP(instruction);
-                    }
-                    else { // Say we don't know this instruction
-                        //LOG_INSTRUCTION(instruction, 11, "-unknown-");
+					if (typeof executeFPP !== 'undefined') {
+						executeFPP(instruction);
+					} else { // Say we don't know this instruction
+						//LOG_INSTRUCTION(instruction, 11, "-unknown-");
                         trap(0o10, 48); // Trap 10 - Illegal instruction
-                    }
+					}
                     break;
                 default:
                     switch (instruction & 0o177000) { // Misc instructions xxRDD
@@ -1249,8 +1297,7 @@ function step(loopCount) {
                                     CPU.flagZ = 0;
                                     CPU.flagV = 0x8000;
                                     CPU.flagC = 0x10000; // divide by zero
-                                }
-                                else {
+                                } else {
                                     reg = (instruction >> 6) & 7;
                                     dst = (CPU.registerVal[reg] << 16) | CPU.registerVal[reg | 1];
                                     CPU.flagC = CPU.flagV = 0;
@@ -1263,8 +1310,7 @@ function step(loopCount) {
                                         CPU.registerVal[reg | 1] = (dst - (result * src)) & 0xffff;
                                         CPU.flagZ = (result >> 16) | result;
                                         CPU.flagN = result >> 16;
-                                    }
-                                    else {
+                                    } else {
                                         CPU.flagV = 0x8000; // overflow - following are indeterminate
                                         CPU.flagZ = (result >> 15) | result; // dodgy
                                         CPU.flagN = dst >> 16; // just as dodgy
@@ -1292,14 +1338,12 @@ function step(loopCount) {
                                     }
                                     CPU.flagC = result << (17 - src);
                                     result = result >> src;
-                                }
-                                else {
+                                } else {
                                     if (src) {
                                         if (src > 16) {
                                             CPU.flagV = result;
                                             result = 0;
-                                        }
-                                        else {
+                                        } else {
                                             result = result << src;
                                             CPU.flagC = result;
                                             dst = (result >> 15) & 0xffff; // check successive sign bits
@@ -1331,8 +1375,7 @@ function step(loopCount) {
                                     if (dst & 0x80000000) {
                                         result |= 0xffffffff << (32 - src);
                                     }
-                                }
-                                else {
+                                } else {
                                     if (src) { // shift left
                                         result = dst << (src - 1);
                                         CPU.flagC = result >> 15;
@@ -1347,8 +1390,7 @@ function step(loopCount) {
                                                 CPU.flagV = 0x8000;
                                             }
                                         }
-                                    }
-                                    else {
+                                    } else {
                                         result = dst;
                                     }
                                 }
@@ -1365,8 +1407,7 @@ function step(loopCount) {
                                 result = CPU.registerVal[instruction & 7] ^= src;
                                 CPU.flagN = CPU.flagZ = result;
                                 CPU.flagV = 0;
-                            }
-                            else {
+                            } else {
                                 if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                     result = dst ^ src;
                                     if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1504,8 +1545,7 @@ function step(loopCount) {
                                             if (!(instruction & 0x38)) {
                                                 CPU.registerVal[instruction & 7] = 0;
                                                 CPU.flagN = CPU.flagC = CPU.flagV = CPU.flagZ = 0;
-                                            }
-                                            else {
+                                            } else {
                                                 if ((dstAddr = getAddrByMode(instruction, WRITE_WORD)) >= 0) { // write word
                                                     if (writeWordByAddr(dstAddr, 0) >= 0) {
                                                         CPU.flagN = CPU.flagC = CPU.flagV = CPU.flagZ = 0;
@@ -1533,8 +1573,7 @@ function step(loopCount) {
                                                 CPU.registerVal[reg] = result & 0xffff;
                                                 CPU.flagN = CPU.flagZ = result;
                                                 CPU.flagV = result & (result ^ dst);
-                                            }
-                                            else {
+                                            } else {
                                                 if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                                     result = dst + 1;
                                                     if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1553,8 +1592,7 @@ function step(loopCount) {
                                                 CPU.registerVal[reg] = result & 0xffff;
                                                 CPU.flagN = CPU.flagZ = result;
                                                 CPU.flagV = (result ^ dst) & dst;
-                                            }
-                                            else {
+                                            } else {
                                                 if ((dst = readWordByAddr(dstAddr = getAddrByMode(instruction, MODIFY_WORD))) >= 0) {
                                                     result = dst - 1;
                                                     if (writeWordByAddr(dstAddr, result) >= 0) {
@@ -1658,16 +1696,14 @@ function step(loopCount) {
                                                 reg = instruction & 7;
                                                 if (6 != reg || ((CPU.PSW >> 2) & 0x3000) == (CPU.PSW & 0x3000)) {
                                                     src = CPU.registerVal[reg];
-                                                }
-                                                else {
+                                                } else {
                                                     src = CPU.stackPointer[(CPU.PSW >> 12) & 3];
                                                 }
                                                 if (pushWord(src, 0) >= 0) {
                                                     CPU.flagN = CPU.flagZ = src;
                                                     CPU.flagV = 0;
                                                 }
-                                            }
-                                            else {
+                                            } else {
                                                 if ((virtualAddress = getVirtualByMode(instruction, 2)) >= 0) {
                                                     if ((CPU.PSW & 0xf000) != 0xf000) {
                                                         virtualAddress &= 0xffff;
@@ -1693,14 +1729,12 @@ function step(loopCount) {
                                                     reg = instruction & 7;
                                                     if (6 != reg || ((CPU.PSW >> 2) & 0x3000) == (CPU.PSW & 0x3000)) {
                                                         CPU.registerVal[reg] = dst;
-                                                    }
-                                                    else {
+                                                    } else {
                                                         CPU.stackPointer[(CPU.PSW >> 12) & 3] = dst;
                                                     }
                                                     CPU.flagN = CPU.flagZ = dst;
                                                     CPU.flagV = 0;
-                                                }
-                                                else {
+                                                } else {
                                                     if ((virtualAddress = getVirtualByMode(instruction, 2)) >= 0) {
                                                         virtualAddress &= 0xffff;
                                                         CPU.mmuMode = (CPU.PSW >> 12) & 3;
@@ -1730,8 +1764,7 @@ function step(loopCount) {
                                             if (!(instruction & 0x38)) {
                                                 CPU.registerVal[instruction & 7] &= 0xff00;
                                                 CPU.flagN = CPU.flagC = CPU.flagV = CPU.flagZ = 0;
-                                            }
-                                            else {
+                                            } else {
                                                 if ((dstAddr = getAddrByMode(instruction, WRITE_BYTE)) >= 0) { // write byte
                                                     if (writeByteByAddr(dstAddr, 0) >= 0) {
                                                         CPU.flagN = CPU.flagC = CPU.flagV = CPU.flagZ = 0;
@@ -1849,28 +1882,26 @@ function step(loopCount) {
                                                 }
                                             }
                                             break;
-                                        //case 0o106400: // MTPS 1064SS
-                                        //    //LOG_INSTRUCTION(instruction, 1, "MTPS");
-                                        //    if ((src = readByteByMode(instruction)) >= 0) {
-                                        //        writePSW((CPU.PSW & 0xff00) | (src & 0xef));
-                                        //    } // Temporary PDP 11/34A
-                                        //    break;
+                                            //case 0o106400: // MTPS 1064SS
+                                            //    //LOG_INSTRUCTION(instruction, 1, "MTPS");
+                                            //    if ((src = readByteByMode(instruction)) >= 0) {
+                                            //        writePSW((CPU.PSW & 0xff00) | (src & 0xef));
+                                            //    } // Temporary PDP 11/34A
+                                            //    break;
                                         case 0o106500: // MFPD 1065DD
                                             //LOG_INSTRUCTION(instruction, 1, "MFPD");
                                             if (!(instruction & 0x38)) {
                                                 reg = instruction & 7;
                                                 if (6 != reg || ((CPU.PSW >> 2) & 0x3000) == (CPU.PSW & 0x3000)) {
                                                     src = CPU.registerVal[reg];
-                                                }
-                                                else {
+                                                } else {
                                                     src = CPU.stackPointer[(CPU.PSW >> 12) & 3];
                                                 }
                                                 if (pushWord(src, 0) >= 0) {
                                                     CPU.flagN = CPU.flagZ = src;
                                                     CPU.flagV = 0;
                                                 }
-                                            }
-                                            else {
+                                            } else {
                                                 if ((virtualAddress = getVirtualByMode(instruction, 2)) >= 0) {
                                                     CPU.mmuMode = (CPU.PSW >> 12) & 3;
                                                     if ((src = readWordByVirtual(virtualAddress | 0x10000)) >= 0) {
@@ -1893,14 +1924,12 @@ function step(loopCount) {
                                                     reg = instruction & 7;
                                                     if (6 != reg || ((CPU.PSW >> 2) & 0x3000) == (CPU.PSW & 0x3000)) {
                                                         CPU.registerVal[reg] = dst;
-                                                    }
-                                                    else {
+                                                    } else {
                                                         CPU.stackPointer[(CPU.PSW >> 12) & 3] = dst;
                                                     }
                                                     CPU.flagN = CPU.flagZ = dst;
                                                     CPU.flagV = 0;
-                                                }
-                                                else {
+                                                } else {
                                                     if ((virtualAddress = getVirtualByMode(instruction, 2)) >= 0) {
                                                         CPU.mmuMode = (CPU.PSW >> 12) & 3;
                                                         if ((dstAddr = mapVirtualToPhysical(virtualAddress | 0x10000, WRITE_MODE)) >= 0) {
@@ -1914,23 +1943,23 @@ function step(loopCount) {
                                                 }
                                             }
                                             break;
-                                        //case 0o106700: // MTFS 1064SS
-                                        //    //LOG_INSTRUCTION(instruction, 1, "MFPS");
-                                        //    src = readPSW() & 0xff;
-                                        //    if (instruction & 0x38) {
-                                        //        if ((dstAddr = getAddrByMode(instruction, WRITE_BYTE)) >= 0) { // write byte
-                                        //            if (writeByteByAddr(dstAddr, src) >= 0) {
-                                        //                CPU.flagN = CPU.flagZ = src << 8;
-                                        //                CPU.flagV = 0;
-                                        //            }
-                                        //        }
-                                        //    } else {
-                                        //        if (src & 0200) src |= 0xff00;
-                                        //        CPU.registerVal[instruction & 7] = src;
-                                        //        CPU.flagN = CPU.flagZ = src << 8;
-                                        //        CPU.flagV = 0;
-                                        //    } // Temporary PDP 11/34A
-                                        //    break;
+                                            //case 0o106700: // MTFS 1064SS
+                                            //    //LOG_INSTRUCTION(instruction, 1, "MFPS");
+                                            //    src = readPSW() & 0xff;
+                                            //    if (instruction & 0x38) {
+                                            //        if ((dstAddr = getAddrByMode(instruction, WRITE_BYTE)) >= 0) { // write byte
+                                            //            if (writeByteByAddr(dstAddr, src) >= 0) {
+                                            //                CPU.flagN = CPU.flagZ = src << 8;
+                                            //                CPU.flagV = 0;
+                                            //            }
+                                            //        }
+                                            //    } else {
+                                            //        if (src & 0200) src |= 0xff00;
+                                            //        CPU.registerVal[instruction & 7] = src;
+                                            //        CPU.flagN = CPU.flagZ = src << 8;
+                                            //        CPU.flagV = 0;
+                                            //    } // Temporary PDP 11/34A
+                                            //    break;
                                         default:
                                             switch (instruction & 0o177770) { // Single register instructions xxxxxR (and CC)
                                                 case 0o000200: // RTS 0o0020R
@@ -1987,8 +2016,7 @@ function step(loopCount) {
                                                             if (0xc000 & CPU.PSW) {
                                                                 CPU.CPU_Error |= 0o200;
                                                                 trap(4, 46);
-                                                            }
-                                                            else {
+                                                            } else {
                                                                 CPU.runState = STATE.HALT; // halt
                                                                 loopCount = 0; // go update the lights
                                                                 //LOG_PRINT();
@@ -2013,8 +2041,7 @@ function step(loopCount) {
                                                         case 0o000005: // RESET 0o00005
                                                             //LOG_INSTRUCTION(instruction, 0, "RESET");
                                                             if (!(CPU.PSW & 0xc000)) {
-                                                                reset_iopage();
-                                                                ;
+                                                                reset_iopage();;
                                                                 CPU.runState = STATE.RESET; // reset state for special pause
                                                                 loopCount = 0; // go update the lights
                                                             }
@@ -2041,10 +2068,10 @@ function step(loopCount) {
                                                                 }
                                                             }
                                                             break;
-                                                        //case 0o000007: // MFPT 0o00007
-                                                        //    //LOG_INSTRUCTION(instruction, 0, "MFPT");
-                                                        //    CPU.registerVal[0] = 1;
-                                                        //    break; // Exists on pdp 11/44 & KB11-EM
+                                                            //case 0o000007: // MFPT 0o00007
+                                                            //    //LOG_INSTRUCTION(instruction, 0, "MFPT");
+                                                            //    CPU.registerVal[0] = 1;
+                                                            //    break; // Exists on pdp 11/44 & KB11-EM
                                                         default: // We don't know this instruction
                                                             //LOG_INSTRUCTION(instruction, 11, "-unknown-");
                                                             trap(0o10, 48); // Trap 10 - Illegal instruction
@@ -2057,12 +2084,15 @@ function step(loopCount) {
             }
         }
     } while (--loopCount > 0 || (loopCount == 0 && (loopCount = ((loopTime >= Date.now()) ? 4000 : 0)))); // check clock every 4000 iterations
+
     if (CPU.runState != STATE.RUN) {
         CPU.displayAddress = CPU.registerVal[7]; // In other than RUN state display current PC
     }
     updateDisplayLights(result); // update address and data displays (result represents 'random' data from 'logic')
     updateStatusLights(0); // update status lights (run, mode, memory mode, etc...)
 }
+
+
 function emulate() {
     "use strict";
     if (CPU.runState == STATE.RUN) {
@@ -2070,22 +2100,22 @@ function emulate() {
     }
     if (CPU.runState == STATE.RUN) {
         setTimeout(emulate, 0); // immediately schedule another batch of instructions
-    }
-    else {
+    } else {
         if (CPU.runState == STATE.RESET) {
             CPU.runState = STATE.RUN;
             setTimeout(emulate, 60); // schedule instructions after a reset pause
         }
     }
 }
-function updateDisplayLights(result) {
+
+
+function updateDisplayLights(result) { // Update address and data display lights
     "use strict";
     if (panel.rotary2 != 1) {
         if (panel.address != (CPU.displayAddress & 0xffff)) {
             panel.address = updatePanel("a", panel.address, (CPU.displayAddress & 0xffff));
         }
-    }
-    else {
+    } else {
         if (panel.address != CPU.displayPhysical) {
             panel.address = updatePanel("a", panel.address, CPU.displayPhysical);
         }
@@ -2095,8 +2125,7 @@ function updateDisplayLights(result) {
         case 1:
             if (CPU.runState == STATE.RUN) { // Update the data lights
                 panel.display = updatePanel("d", panel.display, result & 0xffff); // Random data path
-            }
-            else {
+            } else {
                 if (panel.display != CPU.registerVal[0]) {
                     panel.display = updatePanel("d", panel.display, CPU.registerVal[0]);
                 }
@@ -2114,7 +2143,9 @@ function updateDisplayLights(result) {
             break;
     }
 }
-function updateStatusLights(result) {
+
+
+function updateStatusLights(result) { // Recalculate status panel - Addr Err may be set
     "use strict";
     switch (CPU.runState) {
         case STATE.RUN:
@@ -2134,16 +2165,15 @@ function updateStatusLights(result) {
     if (CPU.MMR0 & 0x101) { // Set addressing mode lights (16, 18 or 22 bit)
         if (CPU.MMR3 & 0x10) {
             result |= 1; // 22 bit
-        }
-        else {
+        } else {
             result |= 2; // 18 bit
         }
-    }
-    else {
+    } else {
         result |= 4; // 16 bit
     }
     if (panel.status != result) {
         panel.status = updatePanel("m", panel.status, result);
     }
 }
-//# sourceMappingURL=pdp11.js.map
+
+

@@ -1,0 +1,20 @@
+{
+  "name": "nankervis-pdp11",
+  "version": "1.0.0",
+  "description": "![alt text](./assets/pdp1170-large.png)",
+  "main": "iopage.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JamesHagerman/nankervis-pdp11-js.git"
+  },
+  "keywords": ["JavaScript","TypeScript","Emulation","PDP-11","PDP","DEC","Digital","Equipment","Corporation"],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JamesHagerman/nankervis-pdp11-js/issues"
+  },
+  "homepage": "https://github.com/JamesHagerman/nankervis-pdp11-js#readme"
+}
